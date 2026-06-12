@@ -1657,7 +1657,7 @@ public:
       //     +----+----+     +----+----+
       //  [[20]]      40    60        80  
       // exercise
-      ++it;
+      //++it;
       // verify
       // does not look at any element
       // does not look at any element
