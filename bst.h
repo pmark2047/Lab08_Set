@@ -75,7 +75,7 @@ public:
 
    iterator find(const T& t);
 
-   // 
+   //
    // Insert
    //
 
@@ -84,17 +84,17 @@ public:
 
    //
    // Remove
-   // 
+   //
 
    iterator erase(iterator& it);
    void   clear() noexcept;
 
-   // 
+   //
    // Status
    //
 
-   bool   empty() const noexcept { return true; }
-   size_t size()  const noexcept { return 99;   }
+   bool   empty() const noexcept { return numElements == 0; }
+   size_t size()  const noexcept { return numElements;   }
    
 
 #ifdef DEBUG // make this visible to the unit tests
@@ -118,20 +118,17 @@ template <typename T>
 class BST <T> :: BNode
 {
 public:
-   // 
+   //
    // Construct
    //
-   BNode()
+   BNode() : pLeft(nullptr), pRight(nullptr), pParent(nullptr), isRed(true)
    {
-      pLeft = pRight = this;
    }
-   BNode(const T &  t) 
+   BNode(const T &  t) : data(t), pLeft(nullptr), pRight(nullptr), pParent(nullptr), isRed(true)
    {
-      pLeft = pRight = this;
    }
-   BNode(T && t) 
-   {  
-      pLeft = pRight = this;
+   BNode(T && t)  : data(std::move(t)), pLeft(nullptr), pRight(nullptr), pParent(nullptr), isRed(true)
+   {
    }
 
    //
@@ -144,11 +141,11 @@ public:
    void addLeft(       T && t);
    void addRight(      T && t);
 
-   // 
+   //
    // Status
    //
-   bool isRightChild(BNode * pNode) const { return true; }
-   bool isLeftChild( BNode * pNode) const { return true; }
+   bool isRightChild(BNode * pNode) const { return pRight == pNode; }
+   bool isLeftChild( BNode * pNode) const { return pLeft == pNode; }
 
    // balance the tree
    void balance();
@@ -182,43 +179,50 @@ class BST <T> :: iterator
 {
 public:
    // constructors and assignment
-   iterator(BNode * p = nullptr)          
-   { 
+   iterator(BNode * p = nullptr)
+   {
+       pNode = p;
    }
-   iterator(const iterator & rhs)         
-   { 
+   iterator(const iterator & rhs)
+   {
+       pNode = rhs.pNode;
    }
    iterator & operator = (const iterator & rhs)
    {
+       pNode = rhs.pNode;
       return *this;
    }
 
    // compare
    bool operator == (const iterator & rhs) const
    {
-      return true;
+      return rhs.pNode == pNode;
    }
    bool operator != (const iterator & rhs) const
    {
-      return true;
+      return rhs.pNode != pNode;
    }
 
    // de-reference. Cannot change because it will invalidate the BST
-   const T & operator * () const 
+   const T & operator * () const
    {
-      return *(new T);
+      return pNode->data;
    }
 
    // increment and decrement
    iterator & operator ++ ();
    iterator   operator ++ (int postfix)
    {
-      return *this;
+       iterator it = *this;
+       ++(*this);
+      return it;
    }
    iterator & operator -- ();
    iterator   operator -- (int postfix)
    {
-      return *this;;
+       iterator it = *this;
+       --(*this);
+      return it;
    }
 
    // must give friend status to remove so it can call getNode() from it
@@ -250,8 +254,8 @@ private:
 template <typename T>
 BST <T> ::BST()
 {
-   numElements = 99;
-   root = new BNode;
+   numElements = 0;
+   root = nullptr;
 }
 
 /*********************************************
@@ -259,10 +263,45 @@ BST <T> ::BST()
  * Copy one tree to another
  ********************************************/
 template <typename T>
-BST <T> :: BST ( const BST<T>& rhs) 
+BST <T> :: BST ( const BST<T>& rhs)
 {
-   numElements = 99;
-   root = new BNode;
+   this->numElements = rhs.numElements;
+   this->root = nullptr;
+   if(rhs.root == nullptr)
+      return;
+   
+   this->root = new BNode(rhs.root->data);
+   this->root->isRed = rhs.root->isRed;
+   
+   const BNode* pSrcCurrent = rhs.root;
+   BNode*pDestCurrent = this->root;
+   
+   while(pSrcCurrent != nullptr)
+   {
+      if(pSrcCurrent->pLeft != nullptr && pDestCurrent->pLeft == nullptr)
+      {
+         BNode* pNew = new BNode(pSrcCurrent->pLeft->data);
+         pNew->isRed = pSrcCurrent->pLeft->isRed;
+         pNew->pParent = pDestCurrent;
+         pDestCurrent->pLeft = pNew;
+         pSrcCurrent = pSrcCurrent->pLeft;
+         pDestCurrent = pDestCurrent->pLeft;
+      }
+      else if(pSrcCurrent->pRight != nullptr && pDestCurrent->pRight == nullptr)
+      {
+         BNode* pNew = new BNode(pSrcCurrent->pRight->data);
+         pNew->isRed = pSrcCurrent->pRight->isRed;
+         pNew->pParent = pDestCurrent;
+         pDestCurrent->pRight = pNew;
+         pSrcCurrent = pSrcCurrent->pRight;
+         pDestCurrent = pDestCurrent->pRight;
+      }
+      else
+      {
+         pSrcCurrent = pSrcCurrent->pParent;
+         pDestCurrent = pDestCurrent->pParent;
+      }
+   }
 }
 
 /*********************************************
@@ -270,10 +309,12 @@ BST <T> :: BST ( const BST<T>& rhs)
  * Move one tree to another
  ********************************************/
 template <typename T>
-BST <T> :: BST(BST <T> && rhs) 
+BST <T> :: BST(BST <T> && rhs)
 {
-   numElements = 99;
-   root = new BNode;
+   this->numElements = rhs.numElements;
+   this->root = rhs.root;
+   rhs.numElements = 0;
+   rhs.root = nullptr;
 }
 
 /*********************************************
@@ -282,7 +323,7 @@ BST <T> :: BST(BST <T> && rhs)
 template <typename T>
 BST <T> :: ~BST()
 {
-
+   clear();
 }
 
 
@@ -293,7 +334,12 @@ BST <T> :: ~BST()
 template <typename T>
 BST <T> & BST <T> :: operator = (const BST <T> & rhs)
 {
-   return *this;
+  
+    if (this == &rhs)
+        return *this;
+    BST <T> temp(rhs);
+    swap(temp);
+    return *this;
 }
 
 /*********************************************
@@ -303,6 +349,11 @@ BST <T> & BST <T> :: operator = (const BST <T> & rhs)
 template <typename T>
 BST <T> & BST <T> :: operator = (const std::initializer_list<T>& il)
 {
+    // make sure it's empty
+    clear();
+    // loop through an add each item
+    for (const auto & item : il)
+        insert(item);
    return *this;
 }
 
@@ -313,6 +364,10 @@ BST <T> & BST <T> :: operator = (const std::initializer_list<T>& il)
 template <typename T>
 BST <T> & BST <T> :: operator = (BST <T> && rhs)
 {
+    // make sure it's empty first
+    clear();
+    // use swap method
+    swap(rhs);
    return *this;
 }
 
@@ -321,9 +376,13 @@ BST <T> & BST <T> :: operator = (BST <T> && rhs)
  * Swap two trees
  ********************************************/
 template <typename T>
-void BST <T> :: swap (BST <T>& rhs)
+void BST <T> :: swap (BST <T> & rhs)
 {
-
+    // swap root nodes
+    std::swap(rhs.root, root);
+    
+    // swap number of elements
+    std::swap(rhs.numElements, numElements);
 }
 
 /*****************************************************
@@ -334,14 +393,125 @@ template <typename T>
 std::pair<typename BST <T> :: iterator, bool> BST <T> :: insert(const T & t, bool keepUnique)
 {
    std::pair<iterator, bool> pairReturn(end(), false);
+    
+    // if the tree is empty
+    if (root == nullptr)
+    {
+        root = new BNode(t);
+        root->isRed = false;                    // root is black
+        numElements = 1;                        // only 1 element now
+        pairReturn.first = iterator(root);
+        pairReturn.second = true;               // it was added
+        return pairReturn;
+    }
+    BNode* pNode = root;
+    bool stop = false;
+    
+    while (!stop)
+    {
+        // if the data is already in there and it's meant to be unique
+        if (keepUnique && t == pNode->data)
+        {
+            pairReturn.first = iterator(pNode);
+            pairReturn.second = false;          // it wasn't added because it's meant to be unique
+            return pairReturn;
+        }
+        
+        // t is smaller than pNode, add it to the left
+        if (t < pNode->data)
+        {
+            // is there a node alread on the left?
+            if (pNode->pLeft)
+                pNode = pNode->pLeft;           // go to the left
+            // no node to left, so add a new one
+            else
+            {
+                pNode->addLeft(t);               // create a new node to the left
+                pairReturn.first = iterator(pNode->pLeft);
+                pairReturn.second = true;        // node was added
+                stop = true;
+            }
+        }
+        // pNode is smaller, check the right
+        else
+        {
+            if (pNode->pRight)
+                pNode = pNode->pRight;              // go to the right
+            else
+            {
+                pNode->addRight(t);               // create a new node to the right
+                pairReturn.first = iterator(pNode->pRight);
+                pairReturn.second = true;        // node was added
+                stop = true;
+            }
+        }
+    }
+    
+    numElements++;
    return pairReturn;
 }
 
 template <typename T>
 std::pair<typename BST <T> ::iterator, bool> BST <T> ::insert(T && t, bool keepUnique)
 {
-   std::pair<iterator, bool> pairReturn(end(), false);
-   return pairReturn;
+    std::pair<iterator, bool> pairReturn(end(), false);
+     
+     // if the tree is empty
+     if (root == nullptr)
+     {
+         root = new BNode(std::move(t));
+         root->isRed = false;                    // root is black
+         numElements = 1;                        // only 1 element now
+         pairReturn.first = iterator(root);
+         pairReturn.second = true;               // it was added
+         return pairReturn;
+     }
+     BNode* pNode = root;
+     bool stop = false;
+     
+     while (!stop)
+     {
+         // if the data is already in there and it's meant to be unique
+         if (keepUnique && t == pNode->data)
+         {
+             pairReturn.first = iterator(pNode);
+             pairReturn.second = false;          // it wasn't added because it's meant to be unique
+             return pairReturn;
+         }
+         
+         // t is smaller than pNode, add it to the left
+         if (t < pNode->data)
+         {
+             // is there a node alread on the left?
+             if (pNode->pLeft)
+                 pNode = pNode->pLeft;           // go to the left
+             // no node to left, so add a new one
+             else
+             {
+                 pNode->addLeft(std::move(t));               // create a new node to the left
+                 pairReturn.first = iterator(pNode->pLeft);
+                 pairReturn.second = true;        // node was added
+                 stop = true;
+             }
+         }
+         // pNode is smaller, check the right
+         else
+         {
+             if (pNode->pRight)
+                 pNode = pNode->pRight;              // go to the right
+             else
+             {
+                 pNode->addRight(std::move(t));               // create a new node to the right
+                 pairReturn.first = iterator(pNode->pRight);
+                 pairReturn.second = true;        // node was added
+                 stop = true;
+             }
+         }
+     }
+     
+     numElements++;
+    return pairReturn;
+
 }
 
 /*************************************************
@@ -350,7 +520,7 @@ std::pair<typename BST <T> ::iterator, bool> BST <T> ::insert(T && t, bool keepU
  ************************************************/
 template <typename T>
 typename BST <T> ::iterator BST <T> :: erase(iterator & it)
-{  
+{
    return end();
 }
 
@@ -361,7 +531,32 @@ typename BST <T> ::iterator BST <T> :: erase(iterator & it)
 template <typename T>
 void BST <T> ::clear() noexcept
 {
-
+   BNode* pCurrent = root;
+   
+   while(pCurrent != nullptr)
+   {
+      if(pCurrent->pLeft != nullptr)
+         pCurrent = pCurrent->pLeft;
+      else if(pCurrent->pRight != nullptr)
+         pCurrent = pCurrent->pRight;
+      else
+      {
+         BNode* pTemp = pCurrent;
+         pCurrent = pCurrent->pParent;
+         if(pCurrent != nullptr)
+         {
+            if (pCurrent->pLeft == pTemp)
+               pCurrent->pLeft = nullptr;
+            else
+               pCurrent->pRight = nullptr;
+         }
+         else
+            root = nullptr;
+         
+         delete pTemp;
+      }
+   }
+   numElements = 0;
 }
 
 /*****************************************************
@@ -371,7 +566,15 @@ void BST <T> ::clear() noexcept
 template <typename T>
 typename BST <T> :: iterator custom :: BST <T> :: begin() const noexcept
 {
-   return end();
+    // is it empty?
+    if (root == nullptr)
+        return end();               // return the end, which is null
+    
+    BNode* p = root;
+    // find the node all the way to the left
+    while (p->pLeft)
+        p = p->pLeft;
+   return iterator(p);
 }
 
 
@@ -382,6 +585,16 @@ typename BST <T> :: iterator custom :: BST <T> :: begin() const noexcept
 template <typename T>
 typename BST <T> :: iterator BST<T> :: find(const T & t)
 {
+    BNode * p = root;
+    while (p != nullptr)
+    {
+        if (p->data == t)
+            return iterator(p);
+        else if (t < p->data)
+            p = p->pLeft;
+        else
+            p = p->pRight;
+    }
    return end();
 }
 
@@ -401,7 +614,9 @@ typename BST <T> :: iterator BST<T> :: find(const T & t)
 template <typename T>
 void BST <T> :: BNode :: addLeft (BNode * pNode)
 {
-
+    pLeft = pNode;                  // make it left of this
+    if (pNode)
+        pNode->pParent = this;      // make this it's parent
 }
 
 /******************************************************
@@ -411,7 +626,11 @@ void BST <T> :: BNode :: addLeft (BNode * pNode)
 template <typename T>
 void BST <T> :: BNode :: addRight (BNode * pNode)
 {
-
+    pRight = pNode;                 // make it right of this
+    // if it's not null...
+    if (pNode)
+        pNode->pParent = this;      // make this it's parent
+    
 }
 
 /******************************************************
@@ -421,7 +640,11 @@ void BST <T> :: BNode :: addRight (BNode * pNode)
 template <typename T>
 void BST<T> :: BNode :: addLeft (const T & t)
 {
-
+    // create a node with given data
+    BNode* pNode = new BNode(t);
+    // add it to the left with method
+    addLeft(pNode);
+    pNode->balance();               // balance it!
 }
 
 /******************************************************
@@ -431,6 +654,11 @@ void BST<T> :: BNode :: addLeft (const T & t)
 template <typename T>
 void BST<T> ::BNode::addLeft(T && t)
 {
+    // create a node with given data and move function
+    BNode* pNode = new BNode(std::move(t));
+    // add it to the left with method
+    addLeft(pNode);
+    pNode->balance();               // balance it!
 
 }
 
@@ -441,6 +669,11 @@ void BST<T> ::BNode::addLeft(T && t)
 template <typename T>
 void BST <T> :: BNode :: addRight (const T & t)
 {
+    // new node with t
+    BNode * pNode = new BNode(t);
+    // add it to the right
+    addRight(pNode);
+    pNode->balance();               // balance
 
 }
 
@@ -451,7 +684,11 @@ void BST <T> :: BNode :: addRight (const T & t)
 template <typename T>
 void BST <T> ::BNode::addRight(T && t)
 {
-
+    // new node with t
+    BNode * pNode = new BNode(std::move(t));
+    // add it to the right
+    addRight(pNode);
+    pNode->balance();               // balance
 }
 
 #ifdef DEBUG
@@ -584,18 +821,104 @@ template <typename T>
 void BST <T> :: BNode :: balance()
 {
    // Case 1: if we are the root, then color ourselves black and call it a day.
-
-
+    if (!pParent)
+    {
+        isRed = false;   // root is black
+        return;
+    }
    // Case 2: if the parent is black, then there is nothing left to do
-
+    if (!pParent->isRed)
+        return;
+    
+    // figure out the family members
+    BNode* pGranny = pParent->pParent;
+    BNode* pAunt = new BNode;               // this one depends
+    if (pGranny->isRightChild(pParent))
+        pAunt = pGranny->pLeft;
+    else
+        pAunt = pGranny->pRight;
+    BNode * pSibling = new BNode;           // this one depends
+    if (pParent->isRightChild(this))
+        pSibling = pParent->pLeft;
+    else
+        pSibling = pParent->pRight;
+    
    // Case 3: if the aunt is red, then just recolor
+    if (pAunt != nullptr && pAunt->isRed == true)
+    {
+        pParent->isRed = false;             // parent is black
+        pAunt->isRed = false;               // right of root is black
+        pGranny->isRed = true;              // root is red
+        pGranny->balance();
+        return;
+    }
+        
 
    // Case 4: if the aunt is black or non-existant, then we need to rotate
 
    // Case 4a: We are mom's left and mom is granny's left
+    // temporary top
+    BNode * pHead = nullptr;
+    if (pParent->isLeftChild(this) && pGranny->isLeftChild(pParent))
+    {
+        pParent->addRight(pGranny);         // granny is rotated to the right
+        pGranny->addLeft(pSibling);         // and siblings are added to granny's right
+        pHead = pParent;
+        
+        pParent->isRed = false;             // Parent is black
+        pGranny->isRed = true;              // granny is red
+    }
    // case 4b: We are mom's right and mom is granny's right
+    else if (pParent->isRightChild(this) && pGranny->isRightChild(pParent))
+    {
+        pParent->addLeft(pGranny);          // granny rotated to left
+        pGranny->addRight(pSibling);        // siblings roatated to granny's left
+        pHead = pParent;
+        
+        pParent->isRed = false;             // Parent is black
+        pGranny->isRed = true;              // granny is red
+    }
    // Case 4c: We are mom's right and mom is granny's left
+    else if (pParent->isRightChild(this) && pGranny->isLeftChild(pParent))
+    {
+        pGranny->addLeft(this->pRight);
+        pParent->addRight(this->pLeft);
+        this->addRight(pGranny);
+        this->addLeft(pParent);
+        pHead = this;
+        
+//        if (pGranny->pParent == nullptr)
+//            this->pParent = nullptr;
+//        else if (pGranny->pParent->pRight == pGranny)
+//            pGranny->pParent->pRight = this;
+//        else
+//            pGranny->pParent->pLeft = this;
+//
+        this->isRed = false;
+        pGranny->isRed = true;
+        
+    }
+    
    // case 4d: we are mom's left and mom is granny's right
+    else if (pParent->isLeftChild(this) && pGranny->isRightChild(pParent))
+    {
+        pGranny->addRight(this->pLeft);
+        pParent->addLeft(this->pRight);
+        
+        this->addLeft(pGranny);
+        this->addRight(pParent);
+        pHead = this;
+//        if (pGranny->pParent == nullptr)
+//            this->pParent = nullptr;
+//        else if (pGranny->pParent->pLeft == pGranny)
+//            pGranny->pParent->pLeft = this;
+//        else
+//            pGranny->pParent->pRight = this;
+        
+        this->isRed = false;
+        pGranny->isRed = true;
+        
+    }
 }
 
 /*************************************************
@@ -604,7 +927,7 @@ void BST <T> :: BNode :: balance()
  ****************** ITERATOR *********************
  *************************************************
  *************************************************
- *************************************************/     
+ *************************************************/
 
 /**************************************************
  * BST ITERATOR :: INCREMENT PREFIX
@@ -613,7 +936,26 @@ void BST <T> :: BNode :: balance()
 template <typename T>
 typename BST <T> :: iterator & BST <T> :: iterator :: operator ++ ()
 {
-   return *this;  
+   if (pNode == nullptr)
+      return *this;
+   
+   if (pNode->pRight != nullptr)
+   {
+      pNode = pNode->pRight;
+      while(pNode->pLeft != nullptr)
+         pNode = pNode->pLeft;
+   }
+   else
+   {
+      BNode* pTemp = pNode;
+      pNode = pNode->pParent;
+      while(pNode != nullptr && pTemp == pNode->pRight)
+      {
+         pTemp = pNode;
+         pNode = pNode->pParent;
+      }
+   }
+   return *this;
 }
 
 /**************************************************
@@ -623,8 +965,26 @@ typename BST <T> :: iterator & BST <T> :: iterator :: operator ++ ()
 template <typename T>
 typename BST <T> :: iterator & BST <T> :: iterator :: operator -- ()
 {
+   if (pNode == nullptr)
+      return *this;
+   
+   if (pNode->pLeft != nullptr)
+   {
+      pNode = pNode->pLeft;
+      while(pNode->pRight != nullptr)
+         pNode = pNode->pRight;
+   }
+   else
+   {
+      BNode* pTemp = pNode;
+      pNode = pNode->pParent;
+      while(pNode != nullptr && pTemp == pNode->pLeft)
+      {
+         pTemp = pNode;
+         pNode = pNode->pParent;
+      }
+   }
    return *this;
-
 }
 
 
