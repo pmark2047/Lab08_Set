@@ -267,57 +267,27 @@ BST <T> :: BST ( const BST<T>& rhs)
 {
    this->numElements = rhs.numElements;
    this->root = nullptr;
-   if(rhs.root == nullptr)
-      return;
    
-   this->root = new BNode(rhs.root->data);
-   this->root->isRed = rhs.root->isRed;
-   this->root->pLeft = nullptr;
-   this->root->pRight = nullptr;
-   this->root->pParent = nullptr;
-   
-   const BNode* pSrcCurrent = rhs.root;
-   BNode* pDestCurrent = this->root;
-   
-   while(pSrcCurrent != nullptr)
+   if (rhs.root == nullptr)
+         return;
+
+   auto copyTree = [](auto& self, const BNode* pSrc, BNode* pParentNode) -> BNode*
    {
-      if(pSrcCurrent->pLeft != nullptr && pDestCurrent->pLeft == nullptr)
-      {
-         BNode* pNew = new BNode(pSrcCurrent->pLeft->data);
-         pNew->isRed = pSrcCurrent->pLeft->isRed;
-         pNew->pLeft = nullptr;
-         pNew->pRight = nullptr;
-         pNew->pParent = pDestCurrent;
-         pDestCurrent->pLeft = pNew;
+      if (pSrc == nullptr)
+         return nullptr;
+            
+      BNode* pNewNode = new BNode(pSrc->data);
+      pNewNode->isRed = pSrc->isRed;
+      pNewNode->pParent = pParentNode;
+      
+      pNewNode->pLeft = self(self, pSrc->pLeft, pNewNode);
+      pNewNode->pRight = self(self, pSrc->pRight, pNewNode);
          
-         pSrcCurrent = pSrcCurrent->pLeft;
-         pDestCurrent = pDestCurrent->pLeft;
-      }
-      else if(pSrcCurrent->pRight != nullptr && pDestCurrent->pRight == nullptr)
-      {
-         BNode* pNew = new BNode(pSrcCurrent->pRight->data);
-         pNew->isRed = pSrcCurrent->pRight->isRed;
-         pNew->pLeft = nullptr;
-         pNew->pRight = nullptr;
-         pNew->pParent = pDestCurrent;
-         pDestCurrent->pRight = pNew;
-         
-         pSrcCurrent = pSrcCurrent->pRight;
-         pDestCurrent = pDestCurrent->pRight;
-      }
-      else
-      {
-         pSrcCurrent = pSrcCurrent->pParent;
-         pDestCurrent = pDestCurrent->pParent;
-         
-         while (pSrcCurrent != nullptr && (pSrcCurrent->pRight == nullptr || pDestCurrent->pRight != nullptr))
-         {
-            pSrcCurrent = pSrcCurrent->pParent;
-            pDestCurrent = pDestCurrent->pParent;
-         }
-      }
+      return pNewNode;
+   };
+
+   this->root = copyTree(copyTree, rhs.root, nullptr);
    }
-}
 
 /*********************************************
  * BST :: MOVE CONSTRUCTOR
@@ -349,38 +319,12 @@ BST <T> :: ~BST()
 template <typename T>
 BST <T> & BST <T> :: operator = (const BST <T> & rhs)
 {
-  
    if (this == &rhs)
        return *this;
 
-   auto itDest = this->begin();
-   auto itSrc = rhs.begin();
-      
-   while (itDest != this->end() && itSrc != rhs.end())
-   {
-      const_cast<T&>(*itDest) = *itSrc;
-      ++itDest;
-      ++itSrc;
-   }
+   BST<T> temp(rhs);
    
-   if (itSrc != rhs.end())
-   {
-      while (itSrc != rhs.end())
-      {
-         insert(*itSrc);
-         ++itSrc;
-      }
-   }
-   
-   else if(itDest != this->end())
-   {
-      while (itDest != this->end())
-      {
-         iterator itKill = itDest;
-         ++itDest;
-         erase(itKill);
-      }
-   }
+   this->swap(temp);
    
    return *this;
 }
@@ -407,10 +351,13 @@ BST <T> & BST <T> :: operator = (const std::initializer_list<T>& il)
 template <typename T>
 BST <T> & BST <T> :: operator = (BST <T> && rhs)
 {
-    // make sure it's empty first
-    clear();
-    // use swap method
-    swap(rhs);
+   if (this == &rhs)
+       return *this;
+
+   clear();
+   
+   this->swap(rhs);
+   
    return *this;
 }
 
@@ -588,66 +535,43 @@ typename BST <T> ::iterator BST <T> :: erase(iterator & it)
       return end();
    
    BNode* pTarget = it.pNode;
+   
    iterator itReturn = it;
    ++itReturn;
    
-   if (pTarget->pLeft && pTarget->pRight)
+   if (pTarget->pLeft != nullptr && pTarget->pRight != nullptr)
    {
       BNode* pSuccessor = pTarget->pRight;
       while (pSuccessor->pLeft != nullptr)
          pSuccessor = pSuccessor->pLeft;
       
-      BNode* pOldTarget = pTarget;
-      BNode* pOldSuccessor = pSuccessor;
+      itReturn = iterator(pSuccessor);
       
-      BNode* pSuccChild = pSuccessor->pRight;
-      if (pSuccessor != pTarget->pRight)
+      BNode* pSuccessorChild = pSuccessor->pRight;
+      if (pSuccessor->pParent != pTarget)
       {
-         pSuccessor->pParent->pLeft = pSuccChild;
-         if (pSuccChild != nullptr)
-            pSuccChild->pParent = pSuccessor->pParent;
-      }
-      
-      if (pSuccessor != pTarget->pRight)
-      {
+         pSuccessor->pParent->pLeft = pSuccessorChild;
+         if (pSuccessorChild != nullptr)
+            pSuccessorChild->pParent = pSuccessor->pParent;
+         
          pSuccessor->pRight = pTarget->pRight;
-         if (pSuccessor->pRight != nullptr)
-            pSuccessor->pRight->pParent = pSuccessor;
+         pTarget->pRight->pParent = pSuccessor;
       }
-      else
-      {
-         pSuccessor->pRight = pSuccChild;
-      }
-
+      
       pSuccessor->pLeft = pTarget->pLeft;
-      if (pSuccessor->pLeft != nullptr)
-         pSuccessor->pLeft->pParent = pSuccessor;
+      pTarget->pLeft->pParent = pSuccessor;
       
       pSuccessor->pParent = pTarget->pParent;
-      
-      if (!pTarget->pParent)
+      if (pTarget->pParent == nullptr)
          this->root = pSuccessor;
       else if (pTarget->pParent->pLeft == pTarget)
          pTarget->pParent->pLeft = pSuccessor;
       else
          pTarget->pParent->pRight = pSuccessor;
-      
-      if (itReturn.pNode == pOldSuccessor)
-         itReturn.pNode = pOldTarget;
-
-      pTarget->pLeft = nullptr;
-      pTarget->pRight = nullptr;
-      pTarget->pParent = nullptr;
    }
    else
    {
-      
       BNode* pChild = (pTarget->pLeft != nullptr) ? pTarget->pLeft : pTarget->pRight;
-      
-      if (pTarget->isRed == false && pChild != nullptr && pChild->isRed == true)
-            {
-               pChild->isRed = false;
-            }
       
       if (pChild != nullptr)
          pChild->pParent = pTarget->pParent;
@@ -659,10 +583,18 @@ typename BST <T> ::iterator BST <T> :: erase(iterator & it)
       else
          pTarget->pParent->pRight = pChild;
    }
-   it.pNode = nullptr;
+   
+   if (pTarget->pParent != nullptr && !pTarget->isRed)
+   {
+      BNode* pChild = (pTarget->pLeft != nullptr) ? pTarget->pLeft : pTarget->pRight;
+      if (pChild != nullptr && pChild->isRed)
+         pChild->isRed = false;
+   }
    
    delete pTarget;
    this->numElements--;
+   it.pNode = nullptr;
+   
    return itReturn;
 }
 
