@@ -272,9 +272,12 @@ BST <T> :: BST ( const BST<T>& rhs)
    
    this->root = new BNode(rhs.root->data);
    this->root->isRed = rhs.root->isRed;
+   this->root->pLeft = nullptr;
+   this->root->pRight = nullptr;
+   this->root->pParent = nullptr;
    
    const BNode* pSrcCurrent = rhs.root;
-   BNode*pDestCurrent = this->root;
+   BNode* pDestCurrent = this->root;
    
    while(pSrcCurrent != nullptr)
    {
@@ -282,8 +285,11 @@ BST <T> :: BST ( const BST<T>& rhs)
       {
          BNode* pNew = new BNode(pSrcCurrent->pLeft->data);
          pNew->isRed = pSrcCurrent->pLeft->isRed;
+         pNew->pLeft = nullptr;
+         pNew->pRight = nullptr;
          pNew->pParent = pDestCurrent;
          pDestCurrent->pLeft = pNew;
+         
          pSrcCurrent = pSrcCurrent->pLeft;
          pDestCurrent = pDestCurrent->pLeft;
       }
@@ -291,8 +297,11 @@ BST <T> :: BST ( const BST<T>& rhs)
       {
          BNode* pNew = new BNode(pSrcCurrent->pRight->data);
          pNew->isRed = pSrcCurrent->pRight->isRed;
+         pNew->pLeft = nullptr;
+         pNew->pRight = nullptr;
          pNew->pParent = pDestCurrent;
          pDestCurrent->pRight = pNew;
+         
          pSrcCurrent = pSrcCurrent->pRight;
          pDestCurrent = pDestCurrent->pRight;
       }
@@ -300,6 +309,12 @@ BST <T> :: BST ( const BST<T>& rhs)
       {
          pSrcCurrent = pSrcCurrent->pParent;
          pDestCurrent = pDestCurrent->pParent;
+         
+         while (pSrcCurrent != nullptr && (pSrcCurrent->pRight == nullptr || pDestCurrent->pRight != nullptr))
+         {
+            pSrcCurrent = pSrcCurrent->pParent;
+            pDestCurrent = pDestCurrent->pParent;
+         }
       }
    }
 }
@@ -335,11 +350,39 @@ template <typename T>
 BST <T> & BST <T> :: operator = (const BST <T> & rhs)
 {
   
-    if (this == &rhs)
-        return *this;
-    BST <T> temp(rhs);
-    swap(temp);
-    return *this;
+   if (this == &rhs)
+       return *this;
+
+   auto itDest = this->begin();
+   auto itSrc = rhs.begin();
+      
+   while (itDest != this->end() && itSrc != rhs.end())
+   {
+      const_cast<T&>(*itDest) = *itSrc;
+      ++itDest;
+      ++itSrc;
+   }
+   
+   if (itSrc != rhs.end())
+   {
+      while (itSrc != rhs.end())
+      {
+         insert(*itSrc);
+         ++itSrc;
+      }
+   }
+   
+   else if(itDest != this->end())
+   {
+      while (itDest != this->end())
+      {
+         iterator itKill = itDest;
+         ++itDest;
+         erase(itKill);
+      }
+   }
+   
+   return *this;
 }
 
 /*********************************************
@@ -426,10 +469,13 @@ std::pair<typename BST <T> :: iterator, bool> BST <T> :: insert(const T & t, boo
             // no node to left, so add a new one
             else
             {
-                pNode->addLeft(t);               // create a new node to the left
-                pairReturn.first = iterator(pNode->pLeft);
-                pairReturn.second = true;        // node was added
-                stop = true;
+               BNode* pNew = new BNode(t);
+               pNode->addLeft(pNew);               // create a new node to the left
+               pNew->balance();
+               
+               pairReturn.first = iterator(pNew);
+               pairReturn.second = true;        // node was added
+               stop = true;
             }
         }
         // pNode is smaller, check the right
@@ -439,15 +485,22 @@ std::pair<typename BST <T> :: iterator, bool> BST <T> :: insert(const T & t, boo
                 pNode = pNode->pRight;              // go to the right
             else
             {
-                pNode->addRight(t);               // create a new node to the right
-                pairReturn.first = iterator(pNode->pRight);
-                pairReturn.second = true;        // node was added
-                stop = true;
+               BNode* pNew = new BNode(t);
+               pNode->addRight(pNew);               // create a new node to the right
+               pNew->balance();
+               
+               pairReturn.first = iterator(pNew);
+               pairReturn.second = true;        // node was added
+               stop = true;
             }
         }
     }
     
-    numElements++;
+   numElements++;
+   
+   while (this->root->pParent != nullptr)
+      this->root = this->root->pParent;
+   
    return pairReturn;
 }
 
@@ -488,10 +541,13 @@ std::pair<typename BST <T> ::iterator, bool> BST <T> ::insert(T && t, bool keepU
              // no node to left, so add a new one
              else
              {
-                 pNode->addLeft(std::move(t));               // create a new node to the left
-                 pairReturn.first = iterator(pNode->pLeft);
-                 pairReturn.second = true;        // node was added
-                 stop = true;
+                BNode* pNew = new BNode(std::move(t));
+                pNode->addLeft(pNew);
+                pNew->balance(); // create a new node to the left
+                
+                pairReturn.first = iterator(pNew);
+                pairReturn.second = true;        // node was added
+                stop = true;
              }
          }
          // pNode is smaller, check the right
@@ -501,16 +557,23 @@ std::pair<typename BST <T> ::iterator, bool> BST <T> ::insert(T && t, bool keepU
                  pNode = pNode->pRight;              // go to the right
              else
              {
-                 pNode->addRight(std::move(t));               // create a new node to the right
-                 pairReturn.first = iterator(pNode->pRight);
-                 pairReturn.second = true;        // node was added
-                 stop = true;
+                BNode* pNew = new BNode(std::move(t));
+                pNode->addRight(pNew);
+                pNew->balance(); // create a new node to the right
+                
+                pairReturn.first = iterator(pNew);
+                pairReturn.second = true;        // node was added
+                stop = true;
              }
          }
      }
      
-     numElements++;
-    return pairReturn;
+   numElements++;
+   
+   while(this->root->pParent != nullptr)
+      this->root = this->root->pParent;
+   
+   return pairReturn;
 
 }
 
@@ -521,7 +584,86 @@ std::pair<typename BST <T> ::iterator, bool> BST <T> ::insert(T && t, bool keepU
 template <typename T>
 typename BST <T> ::iterator BST <T> :: erase(iterator & it)
 {
-   return end();
+   if (it == end() || it.pNode == nullptr)
+      return end();
+   
+   BNode* pTarget = it.pNode;
+   iterator itReturn = it;
+   ++itReturn;
+   
+   if (pTarget->pLeft && pTarget->pRight)
+   {
+      BNode* pSuccessor = pTarget->pRight;
+      while (pSuccessor->pLeft != nullptr)
+         pSuccessor = pSuccessor->pLeft;
+      
+      BNode* pOldTarget = pTarget;
+      BNode* pOldSuccessor = pSuccessor;
+      
+      BNode* pSuccChild = pSuccessor->pRight;
+      if (pSuccessor != pTarget->pRight)
+      {
+         pSuccessor->pParent->pLeft = pSuccChild;
+         if (pSuccChild != nullptr)
+            pSuccChild->pParent = pSuccessor->pParent;
+      }
+      
+      if (pSuccessor != pTarget->pRight)
+      {
+         pSuccessor->pRight = pTarget->pRight;
+         if (pSuccessor->pRight != nullptr)
+            pSuccessor->pRight->pParent = pSuccessor;
+      }
+      else
+      {
+         pSuccessor->pRight = pSuccChild;
+      }
+
+      pSuccessor->pLeft = pTarget->pLeft;
+      if (pSuccessor->pLeft != nullptr)
+         pSuccessor->pLeft->pParent = pSuccessor;
+      
+      pSuccessor->pParent = pTarget->pParent;
+      
+      if (!pTarget->pParent)
+         this->root = pSuccessor;
+      else if (pTarget->pParent->pLeft == pTarget)
+         pTarget->pParent->pLeft = pSuccessor;
+      else
+         pTarget->pParent->pRight = pSuccessor;
+      
+      if (itReturn.pNode == pOldSuccessor)
+         itReturn.pNode = pOldTarget;
+
+      pTarget->pLeft = nullptr;
+      pTarget->pRight = nullptr;
+      pTarget->pParent = nullptr;
+   }
+   else
+   {
+      
+      BNode* pChild = (pTarget->pLeft != nullptr) ? pTarget->pLeft : pTarget->pRight;
+      
+      if (pTarget->isRed == false && pChild != nullptr && pChild->isRed == true)
+            {
+               pChild->isRed = false;
+            }
+      
+      if (pChild != nullptr)
+         pChild->pParent = pTarget->pParent;
+      
+      if (pTarget->pParent == nullptr)
+         this->root = pChild;
+      else if (pTarget->pParent->pLeft == pTarget)
+         pTarget->pParent->pLeft = pChild;
+      else
+         pTarget->pParent->pRight = pChild;
+   }
+   it.pNode = nullptr;
+   
+   delete pTarget;
+   this->numElements--;
+   return itReturn;
 }
 
 /*****************************************************
@@ -614,9 +756,9 @@ typename BST <T> :: iterator BST<T> :: find(const T & t)
 template <typename T>
 void BST <T> :: BNode :: addLeft (BNode * pNode)
 {
-    pLeft = pNode;                  // make it left of this
-    if (pNode)
-        pNode->pParent = this;      // make this it's parent
+   if (pNode != nullptr)
+      pNode->pParent = this;
+   this->pLeft = pNode;
 }
 
 /******************************************************
@@ -626,11 +768,9 @@ void BST <T> :: BNode :: addLeft (BNode * pNode)
 template <typename T>
 void BST <T> :: BNode :: addRight (BNode * pNode)
 {
-    pRight = pNode;                 // make it right of this
-    // if it's not null...
-    if (pNode)
-        pNode->pParent = this;      // make this it's parent
-    
+   if (pNode != nullptr)
+      pNode->pParent = this;
+   this->pRight = pNode;
 }
 
 /******************************************************
@@ -832,16 +972,14 @@ void BST <T> :: BNode :: balance()
     
     // figure out the family members
     BNode* pGranny = pParent->pParent;
-    BNode* pAunt = new BNode;               // this one depends
-    if (pGranny->isRightChild(pParent))
-        pAunt = pGranny->pLeft;
-    else
-        pAunt = pGranny->pRight;
-    BNode * pSibling = new BNode;           // this one depends
-    if (pParent->isRightChild(this))
-        pSibling = pParent->pLeft;
-    else
-        pSibling = pParent->pRight;
+    if (!pGranny)
+       return;
+   
+   BNode* pAunt = nullptr;
+   if (pGranny->pLeft == pParent)
+      pAunt = pGranny->pRight;
+   else
+      pAunt = pGranny->pLeft;
     
    // Case 3: if the aunt is red, then just recolor
     if (pAunt != nullptr && pAunt->isRed == true)
@@ -852,73 +990,96 @@ void BST <T> :: BNode :: balance()
         pGranny->balance();
         return;
     }
-        
 
    // Case 4: if the aunt is black or non-existant, then we need to rotate
-
+   BNode* pGreatGrandparent = pGranny->pParent;
+   BNode* pHead = nullptr;
+   
    // Case 4a: We are mom's left and mom is granny's left
-    // temporary top
-    BNode * pHead = nullptr;
-    if (pParent->isLeftChild(this) && pGranny->isLeftChild(pParent))
+    if (pParent->pLeft == this && pGranny->pLeft == pParent)
     {
-        pParent->addRight(pGranny);         // granny is rotated to the right
-        pGranny->addLeft(pSibling);         // and siblings are added to granny's right
-        pHead = pParent;
-        
-        pParent->isRed = false;             // Parent is black
-        pGranny->isRed = true;              // granny is red
+       BNode* pSibling = pParent->pRight;
+       pParent->addRight(pGranny);
+       pGranny->addLeft(pSibling);
+       pHead = pParent;
+       
+       pParent->isRed = false;
+       pGranny->isRed = true;
     }
    // case 4b: We are mom's right and mom is granny's right
-    else if (pParent->isRightChild(this) && pGranny->isRightChild(pParent))
+    else if (pParent->pRight == this && pGranny->pRight == pParent)
     {
-        pParent->addLeft(pGranny);          // granny rotated to left
-        pGranny->addRight(pSibling);        // siblings roatated to granny's left
-        pHead = pParent;
+       BNode* pSibling = pParent->pLeft;
+       pParent->addLeft(pGranny);          // granny rotated to left
+       pGranny->addRight(pSibling);        // siblings roatated to granny's left
+       pHead = pParent;
         
-        pParent->isRed = false;             // Parent is black
-        pGranny->isRed = true;              // granny is red
+       pParent->isRed = false;             // Parent is black
+       pGranny->isRed = true;              // granny is red
     }
    // Case 4c: We are mom's right and mom is granny's left
-    else if (pParent->isRightChild(this) && pGranny->isLeftChild(pParent))
+    else if (pParent->pRight == this && pGranny->pLeft == pParent)
     {
-        pGranny->addLeft(this->pRight);
-        pParent->addRight(this->pLeft);
-        this->addRight(pGranny);
-        this->addLeft(pParent);
-        pHead = this;
+       BNode* pLeftChild = this->pLeft;
+       BNode* pRightChild = this->pRight;
+       
+       pParent->pRight = pLeftChild;
+       if (pLeftChild)
+          pLeftChild->pParent = pParent;
+       
+       pGranny->pLeft = pRightChild;
+       if (pRightChild)
+          pRightChild->pParent = pGranny;
+       
+       this->pLeft = pParent;
+       pParent->pParent = this;
+       
+       this->pRight = pGranny;
+       pGranny->pParent = this;
+       
+       pHead = this;
         
-//        if (pGranny->pParent == nullptr)
-//            this->pParent = nullptr;
-//        else if (pGranny->pParent->pRight == pGranny)
-//            pGranny->pParent->pRight = this;
-//        else
-//            pGranny->pParent->pLeft = this;
-//
-        this->isRed = false;
-        pGranny->isRed = true;
-        
+       this->isRed = false;
+       pGranny->isRed = true;
     }
     
    // case 4d: we are mom's left and mom is granny's right
-    else if (pParent->isLeftChild(this) && pGranny->isRightChild(pParent))
+    else if (pParent->pLeft == this && pGranny->pRight == pParent)
     {
-        pGranny->addRight(this->pLeft);
-        pParent->addLeft(this->pRight);
+       BNode* pLeftChild = this->pLeft;
+       BNode* pRightChild = this->pRight;
+       
+       pGranny->pRight = pLeftChild;
+       if (pLeftChild)
+          pLeftChild->pParent = pGranny;
+       
+       pParent->pLeft = pRightChild;
+       if (pRightChild)
+          pRightChild->pParent = pParent;
         
-        this->addLeft(pGranny);
-        this->addRight(pParent);
-        pHead = this;
-//        if (pGranny->pParent == nullptr)
-//            this->pParent = nullptr;
-//        else if (pGranny->pParent->pLeft == pGranny)
-//            pGranny->pParent->pLeft = this;
-//        else
-//            pGranny->pParent->pRight = this;
+       this->pLeft = pGranny;
+       pGranny->pParent = this;
+       
+       this->pRight = pParent;
+       pParent->pParent = this;
+       
+       pHead = this;
         
-        this->isRed = false;
-        pGranny->isRed = true;
+       this->isRed = false;
+       pGranny->isRed = true;
         
     }
+   if (pHead != nullptr)
+   {
+      pHead->pParent = pGreatGrandparent;
+      if (pGreatGrandparent != nullptr)
+      {
+         if (pGreatGrandparent->pLeft == pGranny)
+            pGreatGrandparent->pLeft = pHead;
+         else
+            pGreatGrandparent->pRight = pHead;
+      }
+   }
 }
 
 /*************************************************
